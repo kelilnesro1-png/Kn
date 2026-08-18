@@ -1,1 +1,215 @@
 
+<!DOCTYPE html>
+<html lang="am">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KN  ጽሑፍ ማመሳጠሪያ</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f4f4f9;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        textarea, input {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .btn-group {
+            margin-bottom: 10px;
+        }
+        button {
+            padding: 10px 15px;
+            margin-right: 5px;
+            margin-top: 5px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            color: white;
+            font-weight: bold;
+        }
+        .encrypt-btn { background-color: #28a745; }
+        .decrypt-btn { background-color: #007bff; }
+        .clear-btn { background-color: #6c757d; }
+        .copy-btn { background-color: #17a2b8; }
+        .clear-output-btn { background-color: #dc3545; }
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 15px;
+            margin-bottom: 8px;
+        }
+        .result-actions {
+            display: flex;
+            gap: 5px;
+        }
+        .result {
+            padding: 10px;
+            background: #e9ecef;
+            word-break: break-all;
+            border-radius: 4px;
+            min-height: 40px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>KN አጭር ጽሑፍ ማመሳጠሪያ</h2>
+    
+    <label>ጽሑፍ አስገባ:</label>
+    <textarea id="inputText" rows="4" placeholder="እዚህ ጋር ጽሑፉን ይጻፉ..."></textarea>
+    
+    <label>ምስጢራዊ ቁልፍ (Secret Key / PIN):</label>
+    <input type="password" id="secretKey" placeholder="ቁልፍ/PIN ያስገቡ">
+    
+    <div class="btn-group">
+        <button class="encrypt-btn" onclick="encryptText()">አመሰጥር (Encrypt)</button>
+        <button class="decrypt-btn" onclick="decryptText()">ምስጢር ፍታ (Decrypt)</button>
+        <button class="clear-btn" onclick="clearInput()">አጽዳ (Clear)</button>
+    </div>
+
+    <!-- ውጤት፣ የኮፒ እና የውጤት ማፅጃ ቁልፎች -->
+    <div class="result-header">
+        <h3 style="margin: 0;">ውጤት:</h3>
+        <div class="result-actions">
+            <button class="copy-btn" onclick="copyResult()">ኮፒ አድርግ (Copy)</button>
+            <button class="clear-output-btn" onclick="clearOutput()">ውጤት አጽዳ</button>
+        </div>
+    </div>
+    <div id="output" class="result">ውጤቱ እዚህ ይታያል...</div>
+</div>
+
+<script>
+    const FLAG = "★";
+
+    // ተቀያያሪ አጭር ማመሳጠሪያ (Random Salted XOR)
+    function dynamicXorEncrypt(text, key) {
+        // በየጊዜው የሚቀያየር 1 ባይት (Random Salt) ማመንጨት
+        const salt = Math.floor(Math.random() * 256);
+        const dynamicKey = key + String.fromCharCode(salt);
+
+        const encoder = new TextEncoder();
+        const textBytes = encoder.encode(text);
+        const keyBytes = encoder.encode(dynamicKey);
+        
+        // የመጀመሪያው ባይት salt ይሆናል
+        const result = new Uint8Array(textBytes.length + 1);
+        result[0] = salt;
+
+        for (let i = 0; i < textBytes.length; i++) {
+            result[i + 1] = textBytes[i] ^ keyBytes[i % keyBytes.length];
+        }
+
+        let binary = '';
+        for (let i = 0; i < result.length; i++) {
+            binary += String.fromCharCode(result[i]);
+        }
+        return btoa(binary);
+    }
+
+    // ምስጢር ፈቺ
+    function dynamicXorDecrypt(base64Text, key) {
+        const binary = atob(base64Text);
+        if (binary.length < 2) throw new Error("Invalid length");
+
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+        }
+
+        // Salt በመጀመሪያው ቦታ ላይ ይገኛል
+        const salt = bytes[0];
+        const dynamicKey = key + String.fromCharCode(salt);
+
+        const encoder = new TextEncoder();
+        const keyBytes = encoder.encode(dynamicKey);
+        const decryptedBytes = new Uint8Array(bytes.length - 1);
+
+        for (let i = 1; i < bytes.length; i++) {
+            decryptedBytes[i - 1] = bytes[i] ^ keyBytes[(i - 1) % keyBytes.length];
+        }
+
+        const decoder = new TextDecoder('utf-8', { fatal: true });
+        return decoder.decode(decryptedBytes);
+    }
+
+    function encryptText() {
+        const text = document.getElementById("inputText").value;
+        const key = document.getElementById("secretKey").value;
+
+        if (!text || !key) {
+            alert("እባክዎን ጽሑፍ እና ምስጢራዊ ቁልፍ (PIN) ያስገቡ!");
+            return;
+        }
+
+        const textToEncrypt = FLAG + text;
+        const encrypted = dynamicXorEncrypt(textToEncrypt, key);
+        
+        document.getElementById("output").innerText = encrypted;
+        document.getElementById("inputText").value = "";
+    }
+
+    function decryptText() {
+        const text = document.getElementById("inputText").value.trim();
+        const key = document.getElementById("secretKey").value;
+        
+        if (!text || !key) {
+            alert("እባክዎን የታመሰጠረውን ጽሑፍ እና ምስጢራዊ ቁልፍ (PIN) ያስገቡ!");
+            return;
+        }
+
+        try {
+            const decryptedText = dynamicXorDecrypt(text, key);
+            
+            if (decryptedText.startsWith(FLAG)) {
+                document.getElementById("output").innerText = decryptedText.substring(FLAG.length);
+                document.getElementById("inputText").value = "";
+            } else {
+                document.getElementById("output").innerText = "ስህተት፡ ምስጢሩን መፍታት አልተቻለም!";
+            }
+        } catch (e) {
+            document.getElementById("output").innerText = "ስህተት፡ ምስጢሩን መፍታት አልተቻለም!";
+        }
+    }
+
+    function clearInput() {
+        document.getElementById("inputText").value = "";
+        document.getElementById("secretKey").value = "";
+    }
+
+    function clearOutput() {
+        document.getElementById("output").innerText = "ውጤቱ እዚህ ይታያል...";
+    }
+
+    function copyResult() {
+        const outputText = document.getElementById("output").innerText;
+        
+        if (outputText === "ውጤቱ እዚህ ይታያል..." || outputText === "" || outputText.startsWith("ስህተት")) {
+            alert("ኮፒ የሚደረግ ትክክለኛ ውጤት የለም!");
+            return;
+        }
+
+        navigator.clipboard.writeText(outputText).then(() => {
+            alert("ውጤቱ በስኬት ኮፒ ሆኗል!");
+        }).catch(err => {
+            alert("ኮፒ ማድረግ አልተቻለም፡ " + err);
+        });
+    }
+</script>
+
+</body>
+</html>
